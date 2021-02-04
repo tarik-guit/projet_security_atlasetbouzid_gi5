@@ -8,20 +8,21 @@ import com.security.sec.securityjwt.JwtUtils;
 import com.security.sec.securitymodels.ERole;
 import com.security.sec.securitymodels.Role;
 import com.security.sec.securitymodels.User;
+import com.security.sec.securitymodels.Useraide;
 import com.security.sec.securitymodels.repositories.Rolerepo;
 import com.security.sec.securitymodels.repositories.Userepo;
 import com.security.sec.userdetails.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.annotation.Secured;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.HashSet;
 import java.util.List;
@@ -31,7 +32,12 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 public class AuthController {
-    public String username;
+    private String username;
+
+    public String getUsername() {
+        return username;
+    }
+
     @Autowired
     AuthenticationManager authenticationManager;
 
@@ -47,20 +53,14 @@ public class AuthController {
     @Autowired
     JwtUtils jwtUtils;
 
-    /*RequestMapping("/requesting")
-        public void requesting( @RequestBody Object obj) {
 
-            System.out.println(obj);
-            RequestInterceptor.init();
-        }
-    */
     @PostMapping("/signin")
 
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
         //code que j'ai ajouté ici qui doit etre supprimé pour avois seulement le code de l'authentification
-        this.username = loginRequest.getUsername();
+        this.username=loginRequest.getUsername();
         //**************************************************************************************************
         SecurityContextHolder.getContext().setAuthentication(authentication);
         String jwt = jwtUtils.generateJwtToken(authentication);
@@ -72,14 +72,17 @@ public class AuthController {
                 .collect(Collectors.toList());
 
 
+
+
         return ResponseEntity.ok(new JwtResponse(jwt,
                 userDetails.getId(),
                 userDetails.getUsername(),
-                userDetails.getEmail(), roles));
+                userDetails.getEmail(),
+                roles));
     }
+//********ici
 
-    @PostMapping("/signup")
-    public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
+    public ResponseEntity<?> registerUser( SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             return ResponseEntity
                     .badRequest()
@@ -134,5 +137,41 @@ public class AuthController {
 
         return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
+
+
+    @Secured("ROLE_ADMIN")
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUsercontroller(@RequestBody SignupRequest signUpRequest) {
+
+        return this.registerUser(signUpRequest);
+    }
+
+    @GetMapping("/creatadmin")
+    public ResponseEntity<?> ajouteradmin() {
+        Set<String> role =new HashSet<>();
+        role.add("admin");
+        SignupRequest req=new SignupRequest("administrateur","administrateur@gmail.com",role,"adminpassword");
+        return this.registerUser(req);
+    }
+
+    @PutMapping("/modifierpassword")
+    public MessageResponse modifierpassword(@RequestBody Useraide useraide) {
+        User user2 = userRepository.trouverparusername(this.username);
+        if(useraide.getPassword().equals(useraide.getPasswordconfirm())){
+            String password = useraide.getPreviouspassword();
+            if (BCrypt.checkpw(password, user2.getPassword())) {
+                user2.setPassword(encoder.encode(useraide.getPassword()));
+
+            } else {
+                return new MessageResponse("ton password couant est incorrecte");
+            }
+            userRepository.save(user2);
+            if (BCrypt.checkpw(useraide.getPassword(), user2.getPassword())) {
+                return new MessageResponse("password modifié avec succés");
+            }
+            return new MessageResponse("echec de modifier password");
+        }
+        return new MessageResponse("vous avez pas bien confirmé le mot de passe");}
+
 }
 
